@@ -1,6 +1,8 @@
 const express = require('express')
 const app = express()
 
+const Poruka = require('./models/poruke')
+
 const cors = require('cors')
 app.use(cors())
 app.use(express.json())
@@ -17,8 +19,20 @@ const zahtjevInfo = (req, res, next) => {
   
   app.use(zahtjevInfo)
   
+  const errorHandler = (err, req, res, next ) => {    console.log(err.message);     
+    if (err.name === 'CastError') 
+    {        
+        return res.status(400).send(
+            {error: 'krivi format ID-a'})   
+         } 
+         else if (err.name === 'ValidationError'){        return res.status(400).send({error: err.message})  
+        }  
+            
+        next(err)
+    }
 
 
+app.use(errorHandler)
 let poruke = [
     {
         id: 4,
@@ -42,56 +56,67 @@ app.get('/', (req, res) => {
 })
 
 app.get('/api/poruke', (req, res) => {
-    res.json(poruke)
+    Poruka.find({}).then( rezultat =>{
+        
+        res.json(rezultat)
+    })
 })
 
-app.get('/api/poruke/:id', (req, res) => {
-    const id = Number(req.params.id)
-    const poruka = poruke.find(p => p.id === id)
-
-    if (poruka) {
+app.get('/api/poruke/:id', (req, res, next) => {
+  Poruka.findById(req.params.id)
+    .then(poruka => {
+      if (poruka) {
         res.json(poruka)
-    } else {
+      } else {
         res.status(404).end()
-    }
-
+      }
+    })
+    .catch(err => next(err))
 })
+
+
+
 app.delete('/api/poruke/:id', (req, res) => {
-    const id = Number(req.params.id)
-    poruke = poruke.filter(p => p.id !== id)
-    res.status(204).end()
+    Poruka.findByIdAndRemove(req.params.id)
+    .then(result => {
+      res.status(204).end()
+    })
+    .catch(err => next(err))
+  })
 
-})
-
-app.put('/api/poruke/:id', (req, res) => {
-    const id = Number(req.params.id)
+  app.put('/api/poruke/:id', (req, res) => {
     const podatak = req.body
-    poruke = poruke.map(p => p.id !== id ? p : podatak)
-    res.json(podatak)
-
-})
-
-app.post('/api/poruke', (req, res) => {
-    const maxId = poruke.length > 0
-    ? Math.max(...poruke.map(p => p.id))
-    : 0
-
-    const podatak = req.body
-    if(!podatak.sadrzaj){
-        return res.status(400).json({
-            error: 'Nedostaje sadržaj poruke'
-        })
-    }
+    const id = req.params.id
+  
     const poruka = {
-        sadrzaj: podatak.sadrzaj,
-        vazno: podatak.vazno || false,
-        datum: new Date(),
-        id: maxId + 1
+      sadrzaj: podatak.sadrzaj,
+      vazno: podatak.vazno
     }
+  
+    Poruka.findByIdAndUpdate(id, poruka, {new: true})
+    .then( novaPoruka => {
+      res.json(novaPoruka)
+    })
+    .catch(err => next(err))
+  
+  })
 
-    poruke = poruke.concat(poruka) 
-    res.json(poruka)
-})
+  app.post('/api/poruke', (req, res, next) => 
+  {  
+      const podatak = req.body   
+       const poruka = new Poruka
+       ({    
+           sadrzaj: podatak.sadrzaj,    
+           vazno: podatak.vazno || false,   
+            datum: new Date()  })   
+            poruka.save()
+            .then(spremljenaPoruka =>
+                 {    
+                     res.json(spremljenaPoruka)  
+                    })  
+                    .catch(err => next(err))
+    })
+
 
 const nepoznataRuta = (req, res) => {
     res.status(404).send({ error: 'nepostojeca ruta' })
@@ -103,3 +128,17 @@ const PORT = process.env.PORT || 3001
 app.listen(PORT, () => {
     console.log(`Server sluša na portu ${PORT}`);
 })
+
+/*const novaPoruka = new Poruka({
+    sadrzaj: 'Treca poruka - Mongoose',
+    datum: new Date(),
+    vazno: true
+  })
+
+  Poruka.find({vazno: false})
+  .then(result =>{
+    result.forEach( p=>{
+        console.log(p);
+    })
+    mongoose.connection.close()
+}) */
